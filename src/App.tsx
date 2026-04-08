@@ -66,7 +66,10 @@ export default function App() {
   };
 
   const [promptsText, setPromptsText] = useState('');
+  const [topic, setTopic] = useState('My Collection');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isCloudGenerating, setIsCloudGenerating] = useState(false);
+  const [cloudUrl, setCloudUrl] = useState<string | null>(null);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [status, setStatus] = useState<'idle' | 'processing' | 'completed' | 'error'>('idle');
   const [results, setResults] = useState<{ prompt: string; success: boolean; error?: string }[]>([]);
@@ -179,6 +182,47 @@ export default function App() {
     setPromptsText('');
     setStatus('idle');
     setResults([]);
+    setCloudUrl(null);
+  };
+
+  const handleCloudGenerate = async () => {
+    if (!apiKey) {
+      alert("Please enter and save your Gemini API key first.");
+      return;
+    }
+
+    const allPrompts = parsePrompts(promptsText);
+    if (allPrompts.length === 0) return;
+
+    setIsCloudGenerating(true);
+    setCloudUrl(null);
+    setStatus('processing');
+
+    try {
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic,
+          promptList: allPrompts,
+          apiKey
+        })
+      });
+
+      const data = await response.json();
+      if (data.url) {
+        setCloudUrl(data.url);
+        setStatus('completed');
+      } else {
+        throw new Error(data.error || 'Failed to generate cloud ZIP');
+      }
+    } catch (err: any) {
+      console.error("Cloud generation failed:", err);
+      alert(`Cloud generation failed: ${err.message}`);
+      setStatus('error');
+    } finally {
+      setIsCloudGenerating(false);
+    }
   };
 
   const progressPercentage = progress.total > 0 ? (progress.current / progress.total) * 100 : 0;
@@ -307,42 +351,100 @@ export default function App() {
               </button>
             </div>
             
+            <div className="space-y-2">
+              <label className="text-xs font-mono text-gray-500 uppercase tracking-widest">Collection Topic</label>
+              <input 
+                type="text"
+                value={topic}
+                onChange={(e) => setTopic(e.target.value)}
+                placeholder="e.g. Vintage Cars, Cyberpunk City..."
+                className="w-full bg-dark-bg border border-dark-border rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-neon-blue transition-colors"
+                disabled={isGenerating || isCloudGenerating}
+              />
+            </div>
+
             <textarea
               ref={textareaRef}
               value={promptsText}
               onChange={(e) => setPromptsText(e.target.value)}
               placeholder="Paste your prompts here. Supports:&#10;1. Single line prompts&#10;2. Multi-line prompts separated by double newlines&#10;3. Labeled prompts like 'Prompt 1: ... Prompt 2: ...'&#10;&#10;Example:&#10;Prompt 1:&#10;A majestic lion in the savannah&#10;with a golden sunset background&#10;&#10;Prompt 2:&#10;A futuristic neon city"
               className="w-full h-80 bg-dark-bg border border-dark-border rounded-lg p-4 font-mono text-sm focus:outline-none focus:border-neon-blue transition-colors resize-none placeholder:text-gray-700"
-              disabled={isGenerating}
+              disabled={isGenerating || isCloudGenerating}
             />
 
-            <div className="flex items-center justify-between pt-2">
+            <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
               <div className="text-xs text-gray-500 font-mono">
                 {parsePrompts(promptsText).length} Prompts Detected
               </div>
-              <button
-                onClick={() => handleGenerate(false)}
-                disabled={isGenerating || !promptsText.trim() || !apiKey}
-                className={cn(
-                  "flex items-center gap-2 px-6 py-3 rounded-lg font-bold transition-all duration-300",
-                  isGenerating || !promptsText.trim() || !apiKey
-                    ? "bg-gray-800 text-gray-500 cursor-not-allowed"
-                    : "bg-neon-blue text-dark-bg hover:scale-105 active:scale-95 neon-glow"
-                )}
-              >
-                {isGenerating ? (
-                  <>
-                    <Loader2 className="animate-spin" size={20} />
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    <Zap size={20} fill="currentColor" />
-                    Generate & Zip
-                  </>
-                )}
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleCloudGenerate}
+                  disabled={isGenerating || isCloudGenerating || !promptsText.trim() || !apiKey}
+                  className={cn(
+                    "flex items-center gap-2 px-6 py-3 rounded-lg font-bold transition-all duration-300 border border-neon-blue/30 hover:bg-neon-blue/10",
+                    isGenerating || isCloudGenerating || !promptsText.trim() || !apiKey
+                      ? "opacity-30 cursor-not-allowed"
+                      : "text-neon-blue"
+                  )}
+                >
+                  {isCloudGenerating ? (
+                    <>
+                      <Loader2 className="animate-spin" size={20} />
+                      Cloud Processing...
+                    </>
+                  ) : (
+                    <>
+                      <FileArchive size={20} />
+                      Cloud Generate
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => handleGenerate(false)}
+                  disabled={isGenerating || isCloudGenerating || !promptsText.trim() || !apiKey}
+                  className={cn(
+                    "flex items-center gap-2 px-6 py-3 rounded-lg font-bold transition-all duration-300",
+                    isGenerating || isCloudGenerating || !promptsText.trim() || !apiKey
+                      ? "bg-gray-800 text-gray-500 cursor-not-allowed"
+                      : "bg-neon-blue text-dark-bg hover:scale-105 active:scale-95 neon-glow"
+                  )}
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="animate-spin" size={20} />
+                      Local Processing...
+                    </>
+                  ) : (
+                    <>
+                      <Zap size={20} fill="currentColor" />
+                      Local Generate
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
+
+            {cloudUrl && (
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="p-4 bg-green-500/10 border border-green-500/20 rounded-lg flex items-center justify-between"
+              >
+                <div className="flex items-center gap-3 text-green-400">
+                  <CheckCircle2 size={20} />
+                  <span className="text-sm font-medium">Cloud ZIP Ready!</span>
+                </div>
+                <a 
+                  href={cloudUrl} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 transition-colors"
+                >
+                  <Download size={14} />
+                  Download ZIP
+                </a>
+              </motion.div>
+            )}
           </div>
 
           {/* Progress Section */}
