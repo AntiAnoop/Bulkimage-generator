@@ -1,0 +1,5 @@
+{
+  "name": "BulkImageZip",
+  "description": "Generate bulk images from text prompts and download them as a ZIP file using Gemini 2.5 Flash Image.",
+  "requestFramePermissions": []
+}
